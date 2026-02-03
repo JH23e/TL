@@ -1,0 +1,63 @@
+name: Calculate Distance Batch
+
+on:
+  schedule:
+    # 매일 KST 01:00 (UTC 16:00) - 거리 배치 계산
+    - cron: '0 16 * * *'
+  workflow_dispatch:
+
+env:
+  SERVER_URL: ${{ secrets.SERVER_URL }}
+  BATCH_API_SECRET: ${{ secrets.BATCH_API_SECRET }}
+
+jobs:
+  calculate:
+    name: Calculate Distance
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wake up server (Cold Start 방지)
+        shell: bash
+        run: |
+          echo "🔄 Waking up server..."
+          # 서버가 Sleep 상태일 수 있으므로 먼저 깨움
+          curl -sS --max-time 120 "$SERVER_URL/api/health" || echo "⚠️ Health check failed, but continuing..."
+          echo "⏳ Waiting for server to fully wake up..."
+          sleep 15
+
+      - name: Trigger distance calculation
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Starting distance batch calculation..."
+
+          # body + http_code 같이 받기
+          tmp="$(mktemp)"
+          http_code=$(curl -sS --max-time 180 -o "$tmp" -w "%{http_code}" -X POST \
+            -H "Authorization: Bearer $BATCH_API_SECRET" \
+            -H "Content-Type: application/json" \
+            "$SERVER_URL/api/v1/batch/distance?limit=200" || echo "000")
+
+          body="$(cat "$tmp")"
+          echo "HTTP: $http_code"
+          echo "Body: $body"
+
+          if [[ "$http_code" != "200" ]]; then
+            echo "❌ Batch request failed (HTTP $http_code)"
+            exit 1
+          fi
+
+          # JSON 파싱 안전하게
+          if echo "$body" | jq -e . >/dev/null 2>&1; then
+            success=$(echo "$body" | jq -r '.success // false')
+            if [ "$success" = "true" ]; then
+              processed=$(echo "$body" | jq -r '.processed // 0')
+              needsRecalc=$(echo "$body" | jq -r '.needsRecalcCount // 0')
+              echo "✅ Batch completed: $processed processed, $needsRecalc pending"
+            else
+              echo "❌ Batch failed (success=false)"
+              exit 1
+            fi
+          else
+            echo "❌ Response is not valid JSON"
+            exit 1
+          fi

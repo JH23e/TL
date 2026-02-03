@@ -1,0 +1,16 @@
+{
+  "name": "t-lecture",
+  "private": true,
+  "scripts": {
+    "postinstall": "cd server && npm install && cd ../client && npm install",
+    "dev:client": "npm run dev --prefix client",
+    "dev:server": "npm run dev --prefix server",
+    "build:client": "npm run build --prefix client",
+    "build:server": "npm run build --prefix server",
+    "start:server": "npm start --prefix server",
+    "db:up": "docker-compose --env-file server/.env up -d",
+    "db:down": "docker-compose down",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  }
+}

@@ -1,0 +1,121 @@
+enum MilitaryType {
+  Army // 육군
+  Navy // 해군
+  AirForce // 공군
+  Marines // 해병대
+  MND // 국직부대 (국방부 직할)
+
+  @@map("군구분__t")
+}
+
+// 부대 (시설 기본 정보)
+model Unit {
+  id            Int           @id @default(autoincrement())
+  lectureYear   Int           @map("강의년도") // 2025, 2026 등 - 년도별 백업/삭제용
+  name          String        @unique @map("부대명")
+  unitType      MilitaryType? @map("군구분")
+  wideArea      String?       @map("광역")
+  region        String?       @map("지역")
+  addressDetail String?       @map("부대주소") @db.Text
+  detailAddress String?       @map("부대상세주소") @db.Text
+  lat           Float?        @map("위도")
+  lng           Float?        @map("경도")
+
+  // 데이터 검증 상태
+  validationStatus  String  @default("Valid") @map("검증상태") // "Valid", "Invalid"
+  validationMessage String? @map("검증메시지") @db.Text
+
+  trainingPeriods TrainingPeriod[]
+  distances       InstructorUnitDistance[]
+
+  @@index([lectureYear], map: "부대_lectureYear_idx")
+  @@map("부대")
+}
+
+// 교육기간 (정규교육, 추가교육 등)
+model TrainingPeriod {
+  id     Int    @id @default(autoincrement())
+  unitId Int    @map("부대id")
+  name   String @map("교육기간명") // "정규교육", "추가교육 1차" 등
+
+  // 근무시간
+  workStartTime  DateTime? @map("근무시작시간")
+  workEndTime    DateTime? @map("근무종료시간")
+  lunchStartTime DateTime? @map("점심시작시간")
+  lunchEndTime   DateTime? @map("점심종료시간")
+
+  // 담당관
+  officerName  String? @map("간부명")
+  officerPhone String? @map("간부 전화번호")
+  officerEmail String? @map("간부 이메일 주소")
+
+  // 설정
+  isStaffLocked Boolean  @default(false) @map("인원고정")
+  excludedDates String[] @default([]) @map("교육불가일자")
+
+  // 시설 정보 (원래 TrainingLocation에 있던 필드들)
+  hasCateredMeals        Boolean? @map("수탁급식여부")
+  hasHallLodging         Boolean? @map("회관숙박여부")
+  allowsPhoneBeforeAfter Boolean? @map("사전사후 휴대폰 불출 여부")
+
+  // 최초계획 (부대 등록 시점의 데이터, 보고서용)
+  initialPeriodDays    Int? @map("최초기간") // 교육일정 개수 (교육불가일자 제외)
+  initialLocationCount Int? @map("최초그룹수") // 교육장소 개수
+
+  unit      Unit               @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  locations TrainingLocation[]
+  schedules UnitSchedule[]
+
+  @@index([unitId], map: "교육기간_unitId_idx")
+  @@map("교육기간")
+}
+
+// 교육장소
+model TrainingLocation {
+  id               Int @id @default(autoincrement())
+  trainingPeriodId Int @map("교육기간id")
+
+  originalPlace       String?  @map("기존교육장소")
+  changedPlace        String?  @map("변경교육장소")
+  hasInstructorLounge Boolean? @map("강사휴게실 여부")
+  hasWomenRestroom    Boolean? @map("여자화장실 여부")
+  note                String?  @map("특이사항")
+
+  trainingPeriod    TrainingPeriod             @relation(fields: [trainingPeriodId], references: [id], onDelete: Cascade)
+  scheduleLocations ScheduleLocation[]
+  assignments       InstructorUnitAssignment[]
+
+  @@index([trainingPeriodId], map: "교육장소_trainingPeriodId_idx")
+  @@map("교육장소")
+}
+
+// 일정 (날짜)
+model UnitSchedule {
+  id               Int       @id @default(autoincrement())
+  trainingPeriodId Int       @map("교육기간id")
+  date             DateTime? @map("교육일")
+
+  trainingPeriod    TrainingPeriod             @relation(fields: [trainingPeriodId], references: [id], onDelete: Cascade)
+  scheduleLocations ScheduleLocation[]
+  assignments       InstructorUnitAssignment[]
+
+  @@index([date], map: "부대일정_date_idx")
+  @@index([trainingPeriodId], map: "부대일정_trainingPeriodId_idx")
+  @@map("부대일정")
+}
+
+// 일정-장소 연결 (날짜별 장소별 인원)
+model ScheduleLocation {
+  id                 Int  @id @default(autoincrement())
+  unitScheduleId     Int  @map("일정id")
+  trainingLocationId Int  @map("장소id")
+  plannedCount       Int? @map("계획인원")
+  actualCount        Int? @map("참여인원")
+  requiredCount      Int? @map("필요인원") // 수동 설정, 없으면 자동 계산
+
+  schedule UnitSchedule     @relation(fields: [unitScheduleId], references: [id], onDelete: Cascade)
+  location TrainingLocation @relation(fields: [trainingLocationId], references: [id], onDelete: Cascade)
+
+  @@unique([unitScheduleId, trainingLocationId])
+  @@map("일정_장소")
+}
