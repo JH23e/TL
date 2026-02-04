@@ -2,16 +2,25 @@
 import { Pool } from 'pg';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../generated/prisma/client.js';
+import fs from 'fs';          // <--- 추가
+import path from 'path';      // <--- 추가
 
 // ============================================
 // pg Pool 직접 생성 (연결 풀 옵션 제어)
 // ============================================
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  max: 30, // 최대 연결 수
-  min: 0, // 최소 연결 수
-  idleTimeoutMillis: 60000, // 유휴 연결 60초 후 해제
-  connectionTimeoutMillis: 30000, // 연결 획득 대기 30초 (무료 티어 지연 대응)
+  max: 20,
+  min: 0,
+  idleTimeoutMillis: 60000,
+  connectionTimeoutMillis: 30000,
+  ssl: {
+    rejectUnauthorized: true,
+    // 파일 경로로부터 인증서 내용을 읽어옵니다.
+    ca: process.env.AIVEN_CA_CERT 
+        ? fs.readFileSync(path.resolve(process.cwd(), process.env.AIVEN_CA_CERT)).toString() 
+        : undefined,
+  },
 });
 
 // Pool 에러 핸들링 (연결 실패 시 로깅)
